@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Dynamic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Assessment
@@ -14,16 +16,39 @@ namespace Assessment
 
         private readonly DressingRooms m_rooms;
         private Task[] m_tasks;
+        private readonly int m_number_of_customers;
+        private long m_total_room_usage_time;
+        private long m_total_wait_time;
+        private int m_total_number_of_clothing_items;
 
         #endregion
 
         #region Public Fields
-        public static int NumberOfCustomers = 0;
-        public static volatile int TotalRoomUsageTime = 0;
-        public static volatile int TotalWaitTime = 0;
-        public static volatile int TotalNumberOfClothingItems = 0;
+        public int NumberOfCustomers {
+            get
+            {
+                return m_number_of_customers;
+            }
+        }
+        public long TotalRoomUsageTime
+        {
+            get
+            {
+                return m_total_room_usage_time;
+            }
+        }
+        public long TotalWaitTime {
+            get { 
+                return m_total_wait_time;
+            }
+        }
+        public int TotalNumberOfClothingItems {
+            get {
+                return m_total_number_of_clothing_items;
+            }
+        }
 
-        public int TotalNumberOfRooms = 0;
+        public int TotalNumberOfRooms { get; private set; }
 
         #endregion
 
@@ -31,26 +56,26 @@ namespace Assessment
 
         public Scenario(int initial_number_of_customers) 
         { 
-            NumberOfCustomers = initial_number_of_customers;
+            m_number_of_customers = initial_number_of_customers;
             m_rooms = new DressingRooms();
             TotalNumberOfRooms = m_rooms.GetRoomCount();
 
-            TotalRoomUsageTime = 0;
-            TotalWaitTime = 0;
-            TotalNumberOfClothingItems = 0;
+            m_total_room_usage_time = 0;
+            m_total_wait_time = 0;
+            m_total_number_of_clothing_items = 0;
 
             m_tasks = new Task[NumberOfCustomers];
         }
 
         public Scenario(int initial_rooms_available, int initial_number_of_customers)
         {
-            NumberOfCustomers = initial_number_of_customers;
+            m_number_of_customers = initial_number_of_customers;
             m_rooms = new DressingRooms(initial_rooms_available);
             TotalNumberOfRooms = initial_rooms_available;
 
-            TotalRoomUsageTime = 0;
-            TotalWaitTime = 0;
-            TotalNumberOfClothingItems = 0;
+            m_total_room_usage_time = 0;
+            m_total_wait_time = 0;
+            m_total_number_of_clothing_items = 0;
 
             m_tasks = new Task[NumberOfCustomers];
         }
@@ -66,47 +91,40 @@ namespace Assessment
             for (int customers_left = NumberOfCustomers; customers_left > 0; customers_left--)
             {
                 Customer customer = new Customer();
-                TotalNumberOfClothingItems += customer.ClothingItems;
-                var task = Task.Factory.StartNew(() =>
+                m_total_number_of_clothing_items += customer.ClothingItems;
+                m_tasks[customers_left - 1] = Task.Run(() =>
                 {
+                    Console.WriteLine($"Customer {Task.CurrentId} is waiting for a room.");
                     // Let a customer into a room
                     UseDressingRoom(customer.ClothingItems);
                 });
-
-                m_tasks[customers_left - 1] = task;
             }
-
-            
 
             Task.WaitAll(m_tasks);
 
         }
 
-        public static void UseDressingRoom(int item_count)
+        public void UseDressingRoom(int item_count)
         {
-            Stopwatch stopwatch = new();
-            stopwatch.Start();
-
+            Stopwatch wait_timer = Stopwatch.StartNew();
             // Wait for a dressing room to open
             DressingRooms.RequestRoom();
-
+            wait_timer.Stop();
+            Interlocked.Add(ref m_total_wait_time, wait_timer.ElapsedMilliseconds);
+            
             // Record the wait time
-            
-            TotalWaitTime += (int)(stopwatch.ElapsedMilliseconds);
+            Console.WriteLine($"Customer {Task.CurrentId} enters a room.");
 
-            
-            stopwatch.Restart();
 
-            // Simulate trying on clothes for 1-3 minutes 
-            Console.WriteLine($"Next customer is using a room...");
+            // Simulate trying on clothes for 1-3 minutes
+            Stopwatch usage_timer = Stopwatch.StartNew();
             for (; item_count > 0; item_count--)
             {
-                Thread.Sleep(new Random().Next(60000, 1800001));
+                Thread.Sleep(new Random().Next(6000, 18001)); // Using 6-18 seconds to simulate 60-180 seconds
             }
-            Console.WriteLine($"A customer is done.");
-
-            // Record how long the room was used.
-            TotalRoomUsageTime += (int)(stopwatch.ElapsedMilliseconds / 1000); // convert to seconds
+            usage_timer.Stop();
+            Interlocked.Add(ref m_total_room_usage_time, usage_timer.ElapsedMilliseconds);
+            Console.WriteLine($"Customer {Task.CurrentId} is done.");
 
             // Simulate the room becoming available
             DressingRooms.VacateRoom();

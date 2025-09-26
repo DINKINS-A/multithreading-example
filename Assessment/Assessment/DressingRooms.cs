@@ -33,9 +33,9 @@ namespace Assessment
             m_semaphore.Wait();
         }
 
-        public static void VacateRoom()
+        public static void VacateRoom(int number_of_rooms = 1)
         {
-            m_semaphore.Release();
+            m_semaphore.Release(number_of_rooms);
         }
 
         public int GetRoomCount() {
